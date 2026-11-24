@@ -7,52 +7,54 @@
 // @match       https://krillion.io/*
 // @grant       none
 //
-// @author      github/maxcana
+// @author      maxcana
 // @description increases time limit however much you wish. default is 50s (2x original)
 //
 // @run-at      document-start
+// @license     MIT
 // ==/UserScript==
 
 // ----- CONFIG -----
 const NEW_TIME_MS = 50_000
 
-
-// ------------------
-
-
 if (globalThis.TURBOPACK) {
     console.error("too late")
 }
+
+
+
+// ----- larping as turbopack -----
 
 let FAKE_TURBOPACK = undefined
 
 Object.defineProperty(globalThis, "TURBOPACK", {
     get: () => FAKE_TURBOPACK,
+
     set: function (real_turbopack) {
-        // runtime assigns { push: F } here (deob/turbopack-15ml26dbdhvdy.js line 667)
         let real_push = real_turbopack.push
 
         FAKE_TURBOPACK = real_turbopack
         FAKE_TURBOPACK.push = function (stuff) {
-            // .push([<script>, module id, MODULE, module id, MODULE, module id, MODULE, ...])
+            // example call: .push([script, module id, MODULE FN, module id, MODULE FN, module id, MODULE FN, ...])
             for (let i = 1; i < stuff.length; i++) {
                 if (typeof stuff[i] !== "function") continue
 
+                // example module fn: (e,r,s) => { e.s(["MAX_ANSWER_LENGTH", 0, 256]); }
                 let module_fn = stuff[i]
-                stuff[i] = function (e, ...whatever) {
+                stuff[i] = function hooked_module(e, ...whatever) {
+                    // patch e.s (export consts function)
                     let e_s = e.s
-                    e.s = function (arr, ...whatever) {
+                    e.s = function fake_export(arr, ...whatever) {
                         if (arr[0] === "ANSWER_MS") {
                             console.log(`[timemod] module_${stuff[i - 1]} just exported ${arr[0]}, switching ${arr[2]} -> ${NEW_TIME_MS}`)
                             arr[2] = NEW_TIME_MS
                         }
                         e_s.call(e, arr, ...whatever)
                     }
-                    console.log(`[timemod] export patched @ module_${stuff[i - 1]}`)
                     return module_fn.call(this, e, ...whatever)
                 }
             }
             real_push.call(real_turbopack, stuff)
         }
     },
-});
+})
