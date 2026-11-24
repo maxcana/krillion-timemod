@@ -13,10 +13,11 @@
 // @run-at      document-start
 // ==/UserScript==
 
-// CONFIG
+// ----- CONFIG -----
 const NEW_TIME_MS = 50_000
 
 
+// ------------------
 
 
 if (globalThis.TURBOPACK) {
@@ -30,17 +31,26 @@ Object.defineProperty(globalThis, "TURBOPACK", {
     set: function (real_turbopack) {
         // runtime assigns { push: F } here (deob/turbopack-15ml26dbdhvdy.js line 667)
         let real_push = real_turbopack.push
-        
-        FAKE_TURBOPACK = real_turbopack;
-        FAKE_TURBOPACK.push = function (stuff) {
-            // call structure push([<script>, module id, MODULE, module id, MODULE, module id, MODULE, ...])
-            for (let i = 1; i < stuff.length; i++){
-                if (typeof stuff[i] !== "function") continue
-                
-                let module = stuff[i]
 
-                console.log(module)
-                i += 2
+        FAKE_TURBOPACK = real_turbopack
+        FAKE_TURBOPACK.push = function (stuff) {
+            // .push([<script>, module id, MODULE, module id, MODULE, module id, MODULE, ...])
+            for (let i = 1; i < stuff.length; i++) {
+                if (typeof stuff[i] !== "function") continue
+
+                let module_fn = stuff[i]
+                stuff[i] = function (e, ...whatever) {
+                    let e_s = e.s
+                    e.s = function (arr, ...whatever) {
+                        if (arr[0] === "ANSWER_MS") {
+                            console.log(`[timemod] module_${stuff[i - 1]} just exported ${arr[0]}, switching ${arr[2]} -> ${NEW_TIME_MS}`)
+                            arr[2] = NEW_TIME_MS
+                        }
+                        e_s.call(e, arr, ...whatever)
+                    }
+                    console.log(`[timemod] export patched @ module_${stuff[i - 1]}`)
+                    return module_fn.call(this, e, ...whatever)
+                }
             }
             real_push.call(real_turbopack, stuff)
         }
